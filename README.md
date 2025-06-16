@@ -1,2 +1,2 @@
 # FDARCs-Group2
-FDARC: Fruit Detect and Ripeness Classification system
+FDARC: Fruit Detection and Ripeness Classification system
