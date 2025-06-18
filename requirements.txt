@@ -1,0 +1,3 @@
+customtkinter
+ultralytics
+opencv-contrib-python

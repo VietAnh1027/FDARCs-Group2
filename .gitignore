@@ -2,3 +2,4 @@ xlae-env
 cropped_fruits
 *.jpg
 *venv
+.idea
