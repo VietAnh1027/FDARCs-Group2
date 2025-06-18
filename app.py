@@ -4,6 +4,8 @@ from PIL import Image, ImageTk
 import cv2
 import datetime
 import torch
+from cutting_fruit import detect_and_crop
+
 
 class CameraApp:
     def __init__(self, root):
@@ -89,7 +91,8 @@ class CameraApp:
         if ret:
             frame = cv2.resize(frame, (880, 480))  # Giảm chiều cao để vừa giao diện
             # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results = self.model.predict(frame)
+            results = self.model.predict(frame, device="cuda" if torch.cuda.is_available() else "cpu")
+
             new_frame = results[0].plot()
             new_frame = cv2.cvtColor(new_frame, cv2.COLOR_BGR2RGB)
 
@@ -101,22 +104,26 @@ class CameraApp:
 
             self.status_label.configure(text="Streaming...")
 
-        self.root.after(30, self.update_frame)
+        self.root.after(200, self.update_frame)
 
     def capture_image(self):
         ret, frame = self.cap.read()
-        if ret:
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"capture_{timestamp}.jpg"
-            cv2.imwrite(filename, frame)
-            self.status_label.configure(text=f"Saved: {filename}", text_color="#4CAF50")
-            print(f"📸 Đã lưu ảnh: {filename}")
-        else:
+        if not ret:
             self.status_label.configure(text="Capture failed!", text_color="#FF5252")
+            return
+        
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"capture_{timestamp}.jpg"
+        cv2.imwrite(filename, frame)
+        self.status_label.configure(text=f"Đang nhận diện...", text_color="#FFC107")
 
-    def tracking(self):
-        self.status_label.configure(text="Tracking started...", text_color="#2196F3")
-        print("🧠 Tracking chưa được triển khai...")
+        # Dự đoán & cắt ảnh
+        fruit_list = detect_and_crop(frame, self.model)
+
+        if fruit_list:
+            self.status_label.configure(text=f"Đã phát hiện {len(fruit_list)} trái", text_color="#4CAF50")
+        else:
+            self.status_label.configure(text="Không phát hiện được trái cây!", text_color="#FF9800")
 
     def quit_app(self):
         self.status_label.configure(text="Exiting...", text_color="#FF5252")
