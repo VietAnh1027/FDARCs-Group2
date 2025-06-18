@@ -3,3 +3,4 @@ cropped_fruits
 *.jpg
 *venv
 .idea
+.DS_Store
