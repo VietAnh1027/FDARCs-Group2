@@ -4,61 +4,48 @@ from PIL import Image, ImageTk
 import cv2
 import datetime
 import torch
-from cutting_fruit import detect_and_crop
+import os
+from cutting_fruit import detect_and_crop  # Hàm cắt ảnh từ YOLO
 
 
 class CameraApp:
     def __init__(self, root):
         self.root = root
-        root.iconbitmap("logo.ico")
         self.root.title("Xử lí ảnh nhóm 2")
         self.root.geometry("900x564")
         self.root.resizable(False, False)
+        self.root.iconbitmap("logo.ico")
+
+        # Chuyển sang giao diện sáng
+        ctk.set_appearance_mode("light")
+        ctk.set_default_color_theme("blue")  # Có thể đổi theme nếu muốn
+
+        # Load mô hình YOLO
         self.model = YOLO("model/best_205_epoch.pt")
         self.model.to("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Giao diện
-        ctk.set_appearance_mode("dark")
-        ctk.set_default_color_theme("blue")
+        # Biến kiểm soát việc stream camera
+        self.streaming = True
 
-        # Frame chính
-        self.main_frame = ctk.CTkFrame(root, fg_color="#000000")
-        self.main_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        # ===== FRAME CHÍNH =====
+        self.main_frame = ctk.CTkFrame(root)
+        self.main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Frame video
-        self.video_frame = ctk.CTkFrame(self.main_frame, fg_color="#000000", corner_radius=20)
-        self.video_frame.pack(fill="both", expand=True, padx=10, pady=10)
-
-        # Hiển thị video
-        self.video_label = ctk.CTkLabel(self.video_frame, text="")
+        # ===== FRAME VIDEO =====
+        self.video_label = ctk.CTkLabel(self.main_frame, text="")
         self.video_label.pack(fill="both", expand=True)
 
-        # Control panel (xuống dưới video)
-        self.control_frame = ctk.CTkFrame(self.main_frame, fg_color="#000000", corner_radius=10)
-        self.control_frame.pack(fill="x", pady=(0, 10), padx=5)
-
-        # Label trạng thái
-        self.status_label = ctk.CTkLabel(
-            self.control_frame,
-            text="Ready",
-            font=("Roboto", 14),
-            text_color="#4CAF50"
-        )
-        self.status_label.pack(side="left", padx=5, pady=5)
-
-        # Buttons style
+        # ===== NÚT BÊN DƯỚI PHẢI =====
         button_style = {
             "font": ("Roboto", 14, "bold"),
             "corner_radius": 8,
             "text_color": "white",
             "width": 128,
-            "height": 64,
-            "border_width": 0,
+            "height": 48,
         }
 
-        # Buttons
-        self.buttons_frame = ctk.CTkFrame(self.control_frame, fg_color="#000000")
-        self.buttons_frame.pack(side="right")
+        self.buttons_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        self.buttons_frame.pack(side="bottom", anchor="se", padx=10, pady=10)
 
         self.capture_btn = ctk.CTkButton(
             self.buttons_frame,
@@ -83,16 +70,18 @@ class CameraApp:
         # Mở webcam
         self.cap = cv2.VideoCapture(0)
 
-        # Bắt đầu luồng camera
+        # Bắt đầu hiển thị video
         self.update_frame()
 
+    # ===== Cập nhật khung hình từ webcam =====
     def update_frame(self):
+        if not self.streaming:
+            return
+
         ret, frame = self.cap.read()
         if ret:
-            frame = cv2.resize(frame, (880, 480))  # Giảm chiều cao để vừa giao diện
-            # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame = cv2.resize(frame, (880, 480))
             results = self.model.predict(frame, device="cuda" if torch.cuda.is_available() else "cpu")
-
             new_frame = results[0].plot()
             new_frame = cv2.cvtColor(new_frame, cv2.COLOR_BGR2RGB)
 
@@ -102,35 +91,81 @@ class CameraApp:
             self.video_label.imgtk = imgtk
             self.video_label.configure(image=imgtk)
 
-            self.status_label.configure(text="Streaming...")
-
         self.root.after(200, self.update_frame)
 
+    # ===== Chụp ảnh và hiển thị kết quả =====
     def capture_image(self):
         ret, frame = self.cap.read()
         if not ret:
-            self.status_label.configure(text="Capture failed!", text_color="#FF5252")
             return
-        
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"capture_{timestamp}.jpg"
-        cv2.imwrite(filename, frame)
-        self.status_label.configure(text=f"Đang nhận diện...", text_color="#FFC107")
 
-        # Dự đoán & cắt ảnh
+        self.streaming = False
+
         fruit_list = detect_and_crop(frame, self.model)
 
-        if fruit_list:
-            self.status_label.configure(text=f"Đã phát hiện {len(fruit_list)} trái", text_color="#4CAF50")
-        else:
-            self.status_label.configure(text="Không phát hiện được trái cây!", text_color="#FF9800")
+        self.video_label.pack_forget()
+        self.buttons_frame.pack_forget()
 
+        self.result_frame = ctk.CTkFrame(self.main_frame, fg_color="#f5f5f5")
+        self.result_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Nút quay lại
+        back_btn = ctk.CTkButton(self.result_frame, text="← Quay lại", command=self.back_to_main)
+        back_btn.pack(anchor="nw", padx=10, pady=10)
+
+        # ============ SCROLL FRAME ============
+        canvas = ctk.CTkCanvas(self.result_frame, bg="#f5f5f5", highlightthickness=0)
+        scrollbar = ctk.CTkScrollbar(self.result_frame, orientation="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Frame chứa nội dung cuộn
+        scrollable_frame = ctk.CTkFrame(canvas, fg_color="#f5f5f5")
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+        # ============ GRID ẢNH ============
+        max_columns = 5  # ảnh trên 1 hàng
+
+        for i, (name, img) in enumerate(fruit_list):
+            row = i // max_columns
+            col = i % max_columns
+
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(img_rgb).resize((150, 150))
+            tk_img = ImageTk.PhotoImage(pil_img)
+
+            item_frame = ctk.CTkFrame(scrollable_frame, fg_color="white", corner_radius=10)
+            item_frame.grid(row=row, column=col, padx=10, pady=10)
+
+            img_label = ctk.CTkLabel(item_frame, image=tk_img, text="")
+            img_label.image = tk_img
+            img_label.pack(pady=(10, 0))
+
+            info = f"Tên: {name}\nĐộ chín: Chín"
+            info_label = ctk.CTkLabel(item_frame, text=info, text_color="black", justify="center")
+            info_label.pack(pady=(5, 10))
+
+
+    # ===== Trở lại màn hình chính =====
+    def back_to_main(self):
+        self.result_frame.destroy()
+        self.video_label.pack(fill="both", expand=True)
+        self.buttons_frame.pack(side="bottom", anchor="se", padx=10, pady=10)
+        self.streaming = True
+        self.update_frame()
+
+    # ===== Thoát chương trình =====
     def quit_app(self):
-        self.status_label.configure(text="Exiting...", text_color="#FF5252")
         self.cap.release()
         self.root.destroy()
 
-# Chạy ứng dụng
+
 if __name__ == "__main__":
     app = CameraApp(ctk.CTk())
     app.root.mainloop()
