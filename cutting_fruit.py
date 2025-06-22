@@ -12,10 +12,10 @@ def detect_and_crop(image, model, output_dir="cropped_fruits"):
         class_name = model.names[cls_id]
 
         crop = image[y1:y2, x1:x2]
-        output_path = os.path.join(output_dir, f"{class_name}_{i}.jpg")
-        cv2.imwrite(output_path, crop)
+        # output_path = os.path.join(output_dir, f"{class_name}_{i}.jpg")
+        # cv2.imwrite(output_path, crop)
 
         fruit_list.append((class_name, crop))
-        print(f"✅ Đã cắt: {class_name} tại {output_path}")
+        # print(f"✅ Đã cắt: {class_name} tại {output_path}")
 
     return fruit_list

@@ -2,11 +2,9 @@ import customtkinter as ctk
 from ultralytics import YOLO
 from PIL import Image, ImageTk
 import cv2
-import datetime
 import torch
-import os
 from cutting_fruit import detect_and_crop  # Hàm cắt ảnh từ YOLO
-
+from core.predict import FruitRipenessPredictor
 
 class CameraApp:
     def __init__(self, root):
@@ -20,9 +18,10 @@ class CameraApp:
         ctk.set_appearance_mode("light")
         ctk.set_default_color_theme("blue")  # Có thể đổi theme nếu muốn
 
-        # Load mô hình YOLO
-        self.model = YOLO("model/best_205_epoch.pt")
+        # Load các mô hình
+        self.model = YOLO("model/best_186e.pt")
         self.model.to("cuda" if torch.cuda.is_available() else "cpu")
+        self.cnn = FruitRipenessPredictor("model/fruit_ripeness_mobilenetv2.keras")
 
         # Biến kiểm soát việc stream camera
         self.streaming = True
@@ -69,6 +68,8 @@ class CameraApp:
 
         # Mở webcam
         self.cap = cv2.VideoCapture(0)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 860)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 500)
 
         # Bắt đầu hiển thị video
         self.update_frame()
@@ -91,7 +92,7 @@ class CameraApp:
             self.video_label.imgtk = imgtk
             self.video_label.configure(image=imgtk)
 
-        self.root.after(200, self.update_frame)
+        self.root.after(30, self.update_frame)
 
     # ===== Chụp ảnh và hiển thị kết quả =====
     def capture_image(self):
@@ -147,7 +148,9 @@ class CameraApp:
             img_label.image = tk_img
             img_label.pack(pady=(10, 0))
 
-            info = f"Tên: {name}\nĐộ chín: Chín"
+            is_ripe, confidence = self.cnn.predict(img)
+            confidence = int(confidence*100)
+            info = f"Tên: {name}\nĐộ chín: {is_ripe}\nĐộ chính xác: {confidence}%"
             info_label = ctk.CTkLabel(item_frame, text=info, text_color="black", justify="center")
             info_label.pack(pady=(5, 10))
 
