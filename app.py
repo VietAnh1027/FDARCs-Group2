@@ -9,7 +9,7 @@ from core.predict import FruitRipenessPredictor
 class CameraApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Xử lí ảnh nhóm 2")
+        self.root.title("")
         self.root.geometry("900x564")
         self.root.resizable(False, False)
         self.root.iconbitmap("logo.ico")
